@@ -1,0 +1,23 @@
+# SuperApp Platform — Code Owners
+# These owners are required reviewers for PRs touching their areas.
+
+# Global fallback — platform leads review everything
+*                                   @manassehkafoh
+
+# Shared libraries — principal engineer required
+/src/shared/                        @manassehkafoh
+
+# Payment service — payments squad lead + security
+/src/services/payment-api/          @manassehkafoh
+/src/services/wallet-api/           @manassehkafoh
+
+# Identity & security — security engineer required
+/src/services/identity-api/         @manassehkafoh
+
+# Infrastructure — platform team required
+/platform/terraform/                @manassehkafoh
+/platform/kubernetes/               @manassehkafoh
+/.github/                           @manassehkafoh
+
+# CI/CD pipeline changes
+/.github/workflows/                 @manassehkafoh
