@@ -73,3 +73,7 @@ common_tags = {
 domain_name     = "dev.superapp.com.gh"
 acme_email      = "platform@superapp.com.gh"
 tls_cert_issuer = "letsencrypt-staging"  # Use staging ACME for dev
+
+# Data node pool autoscaling
+data_node_min_count = 1
+data_node_max_count = 4

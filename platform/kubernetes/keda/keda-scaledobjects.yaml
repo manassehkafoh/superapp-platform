@@ -1,0 +1,177 @@
+###############################################################################
+# SuperApp Platform — KEDA ScaledObjects
+# Event-driven autoscaling based on Azure Event Hubs (Kafka) consumer lag.
+#
+# Why KEDA over HPA-only?
+#   HPA scales on CPU/memory — but a Kafka consumer can be IDLE (low CPU)
+#   yet have 50,000 unprocessed messages. KEDA scales on the LAG itself,
+#   ensuring consumers catch up without waiting for CPU to spike first.
+#
+# KEDA and HPA coexist: KEDA manages replica count via its own ScaledObject;
+# the HPA continues to enforce CPU/memory ceilings independently.
+# Kubernetes takes the MAX of both desired replica counts.
+#
+# lagThreshold: target lag per replica. Lower = more replicas, faster catch-up.
+#   payment-api: 500 messages/replica  (low latency critical — SLO 99.9%)
+#   wallet-api:  500 messages/replica  (financial consistency)
+#   notification-api: 1000 messages/replica (latency-tolerant)
+#
+# Ref: https://keda.sh/docs/2.13/scalers/azure-event-hub/
+###############################################################################
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: keda-eventhubs-auth
+  namespace: superapp-services
+spec:
+  secretTargetRef:
+    - parameter: connection
+      name: eventhubs-connection
+      key: EVENTHUBS_CONNECTION_STRING
+    - parameter: storageConnection
+      name: eventhubs-connection
+      key: AZURE_STORAGE_CONNECTION_STRING
+---
+###############################################################################
+# payment-api — scale on superapp-payment-source consumer lag
+###############################################################################
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: payment-api-keda
+  namespace: superapp-services
+  labels:
+    app: payment-api
+    scaledobject.keda.sh/name: payment-api-keda
+spec:
+  scaleTargetRef:
+    apiVersion: argoproj.io/v1alpha1
+    kind:       Rollout
+    name:       payment-api
+  minReplicaCount: 3     # Never go below 3 (SLO requirement)
+  maxReplicaCount: 20    # Matches HPA maxReplicas
+  cooldownPeriod:  120   # Seconds before scaling down after low lag
+  pollingInterval: 15    # Check lag every 15 seconds
+
+  triggers:
+    - type: azure-event-hub
+      authenticationRef:
+        name: keda-eventhubs-auth
+      metadata:
+        eventHubName:        superapp-payment-source
+        consumerGroup:       payment-saga-group
+        unprocessedEventThreshold: "500"   # Scale up when lag > 500 per replica
+        activationUnprocessedEventThreshold: "10"  # Min lag to activate scaler
+
+    # Also scale on DLQ backlog — indicates stuck processing
+    - type: azure-event-hub
+      authenticationRef:
+        name: keda-eventhubs-auth
+      metadata:
+        eventHubName:        superapp-dlq
+        consumerGroup:       payment-dlq-group
+        unprocessedEventThreshold: "5"    # Very low threshold — DLQ needs immediate attention
+        activationUnprocessedEventThreshold: "1"
+---
+###############################################################################
+# wallet-api — scale on wallet event + debit command lag
+###############################################################################
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: wallet-api-keda
+  namespace: superapp-services
+  labels:
+    app: wallet-api
+spec:
+  scaleTargetRef:
+    name: wallet-api
+  minReplicaCount: 2
+  maxReplicaCount: 15
+  cooldownPeriod:  120
+  pollingInterval: 15
+
+  triggers:
+    - type: azure-event-hub
+      authenticationRef:
+        name: keda-eventhubs-auth
+      metadata:
+        eventHubName:        superapp-payment-source
+        consumerGroup:       wallet-debit-group
+        unprocessedEventThreshold: "500"
+        activationUnprocessedEventThreshold: "10"
+
+    - type: azure-event-hub
+      authenticationRef:
+        name: keda-eventhubs-auth
+      metadata:
+        eventHubName:        superapp-wallet-events
+        consumerGroup:       wallet-events-group
+        unprocessedEventThreshold: "200"
+        activationUnprocessedEventThreshold: "5"
+---
+###############################################################################
+# notification-api — scale on notification events lag
+# More tolerant threshold: notifications are not SLO-critical like payments
+###############################################################################
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: notification-api-keda
+  namespace: superapp-services
+  labels:
+    app: notification-api
+spec:
+  scaleTargetRef:
+    name: notification-api
+  minReplicaCount: 2
+  maxReplicaCount: 10
+  cooldownPeriod:  300   # 5 min cooldown (less urgent)
+  pollingInterval: 30    # Poll every 30s
+
+  triggers:
+    - type: azure-event-hub
+      authenticationRef:
+        name: keda-eventhubs-auth
+      metadata:
+        eventHubName:        superapp-notification-events
+        consumerGroup:       notification-payment-success-group
+        unprocessedEventThreshold: "1000"
+        activationUnprocessedEventThreshold: "20"
+
+    - type: azure-event-hub
+      authenticationRef:
+        name: keda-eventhubs-auth
+      metadata:
+        eventHubName:        superapp-user-deletion-requests
+        consumerGroup:       notification-erasure-group
+        unprocessedEventThreshold: "50"   # Erasure requests are rare — low threshold
+        activationUnprocessedEventThreshold: "1"
+---
+###############################################################################
+# account-api — scale on user event lag (registrations, KYC)
+###############################################################################
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: account-api-keda
+  namespace: superapp-services
+  labels:
+    app: account-api
+spec:
+  scaleTargetRef:
+    name: account-api
+  minReplicaCount: 2
+  maxReplicaCount: 10
+  cooldownPeriod:  180
+  pollingInterval: 30
+
+  triggers:
+    - type: azure-event-hub
+      authenticationRef:
+        name: keda-eventhubs-auth
+      metadata:
+        eventHubName:        superapp-user-events
+        consumerGroup:       account-user-events-group
+        unprocessedEventThreshold: "200"
+        activationUnprocessedEventThreshold: "5"

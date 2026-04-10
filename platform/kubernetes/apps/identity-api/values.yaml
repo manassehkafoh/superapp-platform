@@ -1,49 +1,82 @@
-# Helm values for identity-api
+# Helm values — identity-api
+# Auto-scaling: HPA v2 (CPU+Memory) + AKS Cluster Autoscaler + KEDA Kafka lag
 replicaCount: 2
 
 image:
   repository: acrsuperapp.azurecr.io/identity-api
   pullPolicy: IfNotPresent
-  tag: ""  # overridden by ArgoCD Image Updater
+  tag: ""
 
 service:
   type: ClusterIP
   port: 8080
 
 resources:
-  requests: { memory: "128Mi", cpu: "100m" }
-  limits:   { memory: "256Mi", cpu: "500m" }
+  requests:
+    cpu:    "200m"
+    memory: "256Mi"
+  limits:
+    cpu:    "1000m"
+    memory: "512Mi"
 
 autoscaling:
   enabled: true
   minReplicas: 2
-  maxReplicas: 10
-  targetCPUUtilizationPercentage: 70
+  maxReplicas: 15
+  targetCPUUtilizationPercentage:    70
+  targetMemoryUtilizationPercentage: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 4
+          periodSeconds: 60
+        - type: Percent
+          value: 100
+          periodSeconds: 60
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 120
+      selectPolicy: Min
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
 
 podSecurityContext:
   runAsNonRoot: true
   runAsUser: 1000
   fsGroup: 1000
-  seccompProfile: { type: RuntimeDefault }
+  seccompProfile:
+    type: RuntimeDefault
 
 containerSecurityContext:
   allowPrivilegeEscalation: false
   readOnlyRootFilesystem: true
-  capabilities: { drop: ["ALL"] }
+  capabilities:
+    drop: ["ALL"]
 
 livenessProbe:
-  httpGet: { path: /health/live, port: 8080 }
+  httpGet: { path: /health/live,  port: 8080 }
   initialDelaySeconds: 15
   periodSeconds: 20
+  failureThreshold: 3
 
 readinessProbe:
   httpGet: { path: /health/ready, port: 8080 }
   initialDelaySeconds: 10
   periodSeconds: 10
+  failureThreshold: 3
 
-podDisruptionBudget:
-  enabled: true
-  minAvailable: 1
+startupProbe:
+  httpGet: { path: /health/ready, port: 8080 }
+  failureThreshold: 30
+  periodSeconds: 10
 
 topologySpreadConstraints:
   - maxSkew: 1
@@ -51,3 +84,18 @@ topologySpreadConstraints:
     whenUnsatisfiable: DoNotSchedule
     labelSelector:
       matchLabels: { app: identity-api }
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels: { app: identity-api }
+
+nodeSelector:
+  superapp.io/node-type: app
+
+verticalPodAutoscaler:
+  enabled: true
+  updateMode: "Off"
+
+keda:
+  enabled: true

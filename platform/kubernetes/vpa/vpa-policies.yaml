@@ -1,0 +1,147 @@
+###############################################################################
+# SuperApp Platform — Vertical Pod Autoscaler (VPA) Policies
+#
+# VPA auto-adjusts CPU/memory *requests* based on observed historical usage,
+# preventing both over-provisioning (wasted cost) and under-provisioning
+# (OOMKilled pods, throttled CPUs).
+#
+# updateMode:
+#   "Off"      — Recommendations calculated, NOT applied. Review quarterly.
+#   "Initial"  — Applied only on NEW pod creation (no disruption to running pods)
+#   "Recreate" — Applied by evicting + recreating pods when recommendation differs
+#   "Auto"     — In-place update (K8s 1.27+) or Recreate
+#
+# CURRENT MODE: "Off" for all services.
+# Rationale: Collect recommendations for one quarter, then promote to "Initial"
+# after validating against payment saga memory patterns.
+# Planned promotion: 2024-Q2
+###############################################################################
+
+---
+# payment-api VPA — most critical, highest memory variance
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: payment-api-vpa
+  namespace: superapp-services
+  labels:
+    app: payment-api
+    component: autoscaling
+spec:
+  targetRef:
+    apiVersion: argoproj.io/v1alpha1
+    kind:       Rollout
+    name:       payment-api
+  updatePolicy:
+    updateMode: "Off"    # Recommendations only — promote to "Initial" in Q2
+  resourcePolicy:
+    containerPolicies:
+      - containerName: payment-api
+        minAllowed:
+          cpu:    100m
+          memory: 256Mi
+        maxAllowed:
+          cpu:    "4"         # Hard ceiling — prevents VPA over-allocating
+          memory: 4Gi
+        controlledResources: ["cpu", "memory"]
+        controlledValues:    RequestsAndLimits
+---
+# wallet-api VPA
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: wallet-api-vpa
+  namespace: superapp-services
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind:       Deployment
+    name:       wallet-api
+  updatePolicy:
+    updateMode: "Off"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: wallet-api
+        minAllowed:   { cpu: 100m, memory: 128Mi }
+        maxAllowed:   { cpu: "2",  memory: 2Gi }
+        controlledValues: RequestsAndLimits
+---
+# identity-api VPA
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: identity-api-vpa
+  namespace: superapp-services
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind:       Deployment
+    name:       identity-api
+  updatePolicy:
+    updateMode: "Off"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: identity-api
+        minAllowed:   { cpu: 100m, memory: 128Mi }
+        maxAllowed:   { cpu: "2",  memory: 1Gi }
+        controlledValues: RequestsAndLimits
+---
+# account-api VPA
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: account-api-vpa
+  namespace: superapp-services
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind:       Deployment
+    name:       account-api
+  updatePolicy:
+    updateMode: "Off"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: account-api
+        minAllowed:   { cpu: 50m,  memory: 64Mi }
+        maxAllowed:   { cpu: "1",  memory: 512Mi }
+        controlledValues: RequestsAndLimits
+---
+# notification-api VPA
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: notification-api-vpa
+  namespace: superapp-services
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind:       Deployment
+    name:       notification-api
+  updatePolicy:
+    updateMode: "Off"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: notification-api
+        minAllowed:   { cpu: 50m,  memory: 64Mi }
+        maxAllowed:   { cpu: "1",  memory: 512Mi }
+        controlledValues: RequestsAndLimits
+---
+# api-gateway VPA
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: api-gateway-vpa
+  namespace: superapp-gateway
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind:       Deployment
+    name:       api-gateway
+  updatePolicy:
+    updateMode: "Off"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: api-gateway
+        minAllowed:   { cpu: 100m, memory: 128Mi }
+        maxAllowed:   { cpu: "3",  memory: 1Gi }
+        controlledValues: RequestsAndLimits

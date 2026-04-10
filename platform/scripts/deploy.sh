@@ -475,6 +475,25 @@ phase_7() {
   log "  FortiCNAPP: ${fr_ready}/${fr_desired} nodes"
   [[ "${fr_ready}" != "0" ]] && ok "  FortiCNAPP agents active"
 
+  
+  step "Checking HPA status across all services..."
+  kubectl get hpa -n superapp-services -n superapp-gateway 2>/dev/null | tee -a "${LOG_FILE}" |     grep -v "^NAME" | while IFS= read -r line; do
+      svc=$(echo "$line" | awk '{print $1}')
+      current=$(echo "$line" | awk '{print $6}')
+      min=$(echo "$line" | awk '{print $4}')
+      max=$(echo "$line" | awk '{print $5}')
+      log "  HPA ${svc}: ${current} replicas (min=${min} max=${max})"
+    done
+
+  step "Checking KEDA ScaledObjects..."
+  kubectl get scaledobjects -n superapp-services 2>/dev/null | tee -a "${LOG_FILE}" ||     warn "  KEDA ScaledObjects not yet deployed (will be synced by ArgoCD)"
+
+  step "Checking VPA recommendations..."
+  kubectl get vpa -n superapp-services 2>/dev/null | tee -a "${LOG_FILE}" |     grep -v "^NAME" | while IFS= read -r line; do
+      vpa_name=$(echo "$line" | awk '{print $1}')
+      log "  VPA: ${vpa_name} (recommendations available in kubectl describe vpa ${vpa_name})"
+    done
+
   step "Kafka consumer lag..."
   local hi_lag
   hi_lag=$(kubectl exec -n kafka kafka-0 2>/dev/null -- \

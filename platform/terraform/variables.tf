@@ -330,3 +330,24 @@ locals {
     created_date    = timestamp()
   }
 }
+
+# ── Data node pool autoscaling (added: autoscaling implementation) ────────
+variable "data_node_min_count" {
+  description = "Minimum node count for the data node pool (Redis, Kafka consumers)"
+  type        = number
+  default     = 2
+  validation {
+    condition     = var.data_node_min_count >= 2
+    error_message = "data_node_min_count must be >= 2 for zone redundancy"
+  }
+}
+
+variable "data_node_max_count" {
+  description = "Maximum node count for the data node pool"
+  type        = number
+  default     = 6
+  validation {
+    condition     = var.data_node_max_count <= 20
+    error_message = "data_node_max_count must be <= 20"
+  }
+}

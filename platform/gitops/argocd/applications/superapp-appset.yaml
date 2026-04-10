@@ -382,3 +382,43 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+---
+# KEDA ScaledObjects — event-driven autoscaling on Kafka consumer lag
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: superapp-keda-scaledobjects
+  namespace: argocd
+spec:
+  project: superapp
+  source:
+    repoURL: https://github.com/manassehkafoh/superapp-platform.git
+    targetRevision: main
+    path: platform/kubernetes/keda
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: superapp-services
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+---
+# VPA Policies — vertical pod autoscaler recommendations (Off mode)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: superapp-vpa-policies
+  namespace: argocd
+spec:
+  project: superapp
+  source:
+    repoURL: https://github.com/manassehkafoh/superapp-platform.git
+    targetRevision: main
+    path: platform/kubernetes/vpa
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: superapp-services
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

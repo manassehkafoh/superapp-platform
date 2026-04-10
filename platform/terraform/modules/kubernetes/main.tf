@@ -226,8 +226,10 @@ resource "azurerm_kubernetes_cluster_node_pool" "data" {
   os_disk_type          = "Managed"  # Persistent disk for data nodes
   os_disk_size_gb       = 512
   mode                  = "User"
-  enable_auto_scaling   = false
-  node_count            = var.data_node_count
+  enable_auto_scaling   = true
+  min_count             = var.data_node_min_count
+  max_count             = var.data_node_max_count
+  node_count            = var.data_node_min_count
 
   node_labels = {
     "superapp.io/node-type" = "data"
@@ -249,7 +251,7 @@ resource "azurerm_kubernetes_cluster_node_pool" "security" {
   vnet_subnet_id        = var.aks_app_subnet_id
   zones                 = ["1", "2", "3"]
   mode                  = "User"
-  enable_auto_scaling   = false
+  enable_auto_scaling   = false   # Security pool: fixed count (Falco/FortiCNAPP DaemonSets)
   node_count            = 3
 
   node_labels = {
@@ -483,4 +485,71 @@ output "oidc_issuer_url" {
 
 output "kubelet_identity_object_id" {
   value = azurerm_user_assigned_identity.aks_kubelet.principal_id
+}
+
+###############################################################################
+# KEDA (Kubernetes Event-Driven Autoscaling)
+# Scales pods based on Azure Event Hubs consumer lag (Kafka protocol).
+# Works alongside HPA — Kubernetes takes the maximum desired replica count.
+# Version 2.13+ required for Azure Event Hubs trigger.
+###############################################################################
+resource "helm_release" "keda" {
+  name             = "keda"
+  repository       = "https://kedacore.github.io/charts"
+  chart            = "keda"
+  version          = "2.13.0"
+  namespace        = "keda"
+  create_namespace = true
+  atomic           = true
+  timeout          = 300
+
+  values = [yamlencode({
+    resources = {
+      operator = {
+        requests = { cpu = "100m",  memory = "128Mi" }
+        limits   = { cpu = "500m",  memory = "512Mi" }
+      }
+      metricServer = {
+        requests = { cpu = "100m",  memory = "128Mi" }
+        limits   = { cpu = "500m",  memory = "512Mi" }
+      }
+    }
+    prometheus = {
+      metricServer = { enabled = true, podMonitor = { enabled = true } }
+      operator     = { enabled = true, podMonitor = { enabled = true } }
+    }
+    logging = { level = "info" }
+  })]
+}
+
+###############################################################################
+# VPA (Vertical Pod Autoscaler) — recommendations only (updateMode: Off)
+# Collects resource usage data; recommendations reviewed quarterly.
+# Planned promotion to "Initial" mode in 2024-Q2.
+###############################################################################
+resource "helm_release" "vpa" {
+  name             = "vpa"
+  repository       = "https://charts.fairwinds.com/stable"
+  chart            = "vpa"
+  version          = "4.4.6"
+  namespace        = "vpa"
+  create_namespace = true
+  atomic           = true
+  timeout          = 300
+
+  values = [yamlencode({
+    recommender = {
+      enabled = true
+      resources = {
+        requests = { cpu = "50m",  memory = "256Mi" }
+        limits   = { cpu = "200m", memory = "512Mi" }
+      }
+    }
+    updater = {
+      enabled = false   # Off: do not auto-evict pods (updateMode = Off on VPA objects)
+    }
+    admissionController = {
+      enabled = false   # Off: do not mutate pod specs automatically
+    }
+  })]
 }

@@ -300,3 +300,10 @@ secretProviderClass:
         - |
           objectName: ghipss-api-key
           objectType: secret
+
+verticalPodAutoscaler:
+  enabled: true
+  updateMode: "Off"
+
+keda:
+  enabled: true

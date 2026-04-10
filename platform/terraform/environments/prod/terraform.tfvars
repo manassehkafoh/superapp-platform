@@ -49,3 +49,7 @@ alert_emails = [
 # pagerduty_key         = ""   # TF_VAR_pagerduty_key
 # slack_api_url         = ""   # TF_VAR_slack_api_url
 # grafana_admin_password = ""  # TF_VAR_grafana_admin_password
+
+# Data node pool autoscaling
+data_node_min_count = 2
+data_node_max_count = 8
