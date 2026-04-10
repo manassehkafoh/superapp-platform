@@ -114,6 +114,10 @@ services:
     container_name: superapp-alertmanager
     ports:
       - "9093:9093"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9093/-/healthy"]
+      interval: 20s
+      retries: 5
     volumes:
       - ./platform/monitoring/prometheus/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       - alertmanager_data:/alertmanager
@@ -153,6 +157,10 @@ services:
     command: -config.file=/etc/loki/local-config.yaml
     ports:
       - "3100:3100"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3100/ready"]
+      interval: 20s
+      retries: 5
     volumes:
       - loki_data:/loki
 
@@ -164,6 +172,10 @@ services:
     ports:
       - "3200:3200"
       - "4317:4317"   # OTLP gRPC
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3200/ready"]
+      interval: 20s
+      retries: 5
     volumes:
       - tempo_data:/tmp/tempo
 
@@ -181,6 +193,10 @@ services:
       - "4318:4318"   # OTLP HTTP
       - "8889:8889"   # Prometheus exporter
       - "13133:13133" # Health check
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:13133/"]
+      interval: 20s
+      retries: 5
     volumes:
       - ./platform/monitoring/otel/otel-collector-config.yaml:/etc/otel/config.yaml:ro
     environment:
@@ -193,6 +209,10 @@ services:
     container_name: superapp-pushgateway
     ports:
       - "9091:9091"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9091/-/healthy"]
+      interval: 20s
+      retries: 5
 
 volumes:
   elasticsearch_data:

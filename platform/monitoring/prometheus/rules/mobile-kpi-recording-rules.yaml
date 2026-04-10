@@ -129,6 +129,32 @@ groups:
             )
           ) * 100
 
+
+      # API error rate (superapp_api_errors_total + superapp_api_requests_total)
+      - record: superapp:api_error_rate_percent
+        expr: |
+          (
+            rate(superapp_api_errors_total[5m])
+          / rate(superapp_api_requests_total[5m]) * 100
+          ) or vector(0)
+
+      # API requests per second by service
+      - record: superapp:api_request_rate
+        expr: rate(superapp_api_requests_total[5m])
+
+      # Channel migration tracking (superapp_payment_transactions_by_channel_total)
+      - record: superapp:channel_migration_digital_rate
+        expr: |
+          (
+            rate(superapp_payment_transactions_by_channel_total{channel="mobile"}[24h])
+          /
+            sum(rate(superapp_payment_transactions_by_channel_total[24h]))
+          ) * 100
+
+      # Failed transactions from dedicated counter (superapp_payment_transactions_failed_total)
+      - record: superapp:failed_transactions_rate_dedicated
+        expr: rate(superapp_payment_transactions_failed_total[5m])
+
   # ── Kafka / Messaging health ────────────────────────────────────────────
   - name: superapp.kafka.kpis
     interval: 30s
