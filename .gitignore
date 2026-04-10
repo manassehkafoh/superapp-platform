@@ -1,0 +1,37 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+
+# Terraform
+**/.terraform/
+*.tfplan
+*.tfstate
+*.tfstate.backup
+.terraform.lock.hcl
+
+# Secrets — never commit these
+*.pem
+*.key
+*.pfx
+*.p12
+appsettings.*.json
+!appsettings.Development.json.example
+.env
+.env.*
+secrets.yaml
+
+# Build
+artifacts/
+dist/
+*.nupkg
+
+# OS
+.DS_Store
+Thumbs.db

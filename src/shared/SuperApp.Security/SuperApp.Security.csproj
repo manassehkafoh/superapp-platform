@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><Description>Shared security middleware: correlation ID, security headers, audit logging</Description></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../SuperApp.Common/SuperApp.Common.csproj" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.0" />
+  </ItemGroup>
+</Project>

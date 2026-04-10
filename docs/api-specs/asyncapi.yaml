@@ -1,0 +1,131 @@
+asyncapi: "2.6.0"
+info:
+  title: SuperApp Event Catalogue
+  version: "1.0.0"
+  description: |
+    All Kafka events published and consumed by SuperApp microservices.
+    All events follow the DomainEventBase structure (eventId, eventType, aggregateId, occurredAt, correlationId).
+
+channels:
+  superapp-payment-source:
+    description: Payment lifecycle events
+    subscribe:
+      message:
+        oneOf:
+          - $ref: '#/components/messages/PaymentInitiated'
+          - $ref: '#/components/messages/PaymentCompleted'
+          - $ref: '#/components/messages/PaymentFailed'
+
+  superapp-wallet-events:
+    description: Wallet balance change events
+    subscribe:
+      message:
+        oneOf:
+          - $ref: '#/components/messages/WalletCredited'
+          - $ref: '#/components/messages/WalletDebited'
+
+  superapp-user-events:
+    description: User registration and KYC events
+    subscribe:
+      message:
+        oneOf:
+          - $ref: '#/components/messages/UserRegistered'
+          - $ref: '#/components/messages/UserKycCompleted'
+
+  superapp-audit-logs:
+    description: Immutable compliance audit trail (7-year retention, Avro archived)
+    subscribe:
+      message:
+        $ref: '#/components/messages/AuditEvent'
+
+components:
+  messages:
+    PaymentInitiated:
+      name: PaymentInitiated
+      title: Payment Initiated
+      summary: Published when a new payment is created (status = Pending)
+      payload:
+        type: object
+        properties:
+          paymentId:          { type: string, format: uuid }
+          sourceWalletId:     { type: string }
+          destinationAccount: { type: string }
+          amount:             { type: number }
+          currency:           { type: string }
+          paymentRail:        { type: string }
+          initiatedByUserId:  { type: string }
+          correlationId:      { type: string }
+          occurredAt:         { type: string, format: date-time }
+
+    PaymentCompleted:
+      name: PaymentCompleted
+      payload:
+        type: object
+        properties:
+          paymentId:         { type: string, format: uuid }
+          externalReference: { type: string }
+          amount:            { type: number }
+          currency:          { type: string }
+
+    PaymentFailed:
+      name: PaymentFailed
+      payload:
+        type: object
+        properties:
+          paymentId:     { type: string, format: uuid }
+          failureCode:   { type: string, example: "GHIPSS-404" }
+          failureReason: { type: string }
+
+    WalletCredited:
+      name: WalletCredited
+      payload:
+        type: object
+        properties:
+          walletId:  { type: string }
+          userId:    { type: string }
+          amount:    { type: number }
+          currency:  { type: string }
+          reference: { type: string }
+
+    WalletDebited:
+      name: WalletDebited
+      payload:
+        type: object
+        properties:
+          walletId:  { type: string }
+          userId:    { type: string }
+          amount:    { type: number }
+          currency:  { type: string }
+          reference: { type: string }
+
+    UserRegistered:
+      name: UserRegistered
+      payload:
+        type: object
+        properties:
+          userId:      { type: string }
+          email:       { type: string }
+          phoneNumber: { type: string }
+          tier:        { type: string, enum: [Basic, Premium, Business] }
+
+    UserKycCompleted:
+      name: UserKycCompleted
+      payload:
+        type: object
+        properties:
+          userId:     { type: string }
+          kycLevel:   { type: string, enum: [Tier1, Tier2, Tier3] }
+          verifiedBy: { type: string }
+
+    AuditEvent:
+      name: AuditEvent
+      payload:
+        type: object
+        properties:
+          actorId:    { type: string }
+          action:     { type: string }
+          resource:   { type: string }
+          resourceId: { type: string }
+          outcome:    { type: string, enum: [Success, Failure] }
+          ipAddress:  { type: string }
+          occurredAt: { type: string, format: date-time }

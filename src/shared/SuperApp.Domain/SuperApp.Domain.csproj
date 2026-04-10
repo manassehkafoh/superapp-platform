@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Domain primitives, value objects, and domain events shared across bounded contexts</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../SuperApp.Common/SuperApp.Common.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Kafka messaging abstractions, MassTransit configuration, and event contracts</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../SuperApp.Domain/SuperApp.Domain.csproj" />
+    <PackageReference Include="MassTransit"                     Version="8.2.3" />
+    <PackageReference Include="MassTransit.Kafka"               Version="8.2.3" />
+    <PackageReference Include="MassTransit.Extensions.DependencyInjection" Version="8.2.3" />
+  </ItemGroup>
+</Project>

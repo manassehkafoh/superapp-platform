@@ -1,0 +1,375 @@
+###############################################################################
+# SuperApp Platform — Cilium Network Policies
+# Enforces Zero Trust L3/L4/L7 micro-segmentation within the cluster
+# All traffic is DENY by default; explicit allow rules define the mesh
+###############################################################################
+
+---
+# Default deny-all for superapp-services namespace
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: superapp-services
+spec:
+  endpointSelector: {}   # matches ALL pods in namespace
+  ingress: []            # deny all inbound
+  egress:                # allow DNS only
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system
+            "k8s:app.kubernetes.io/name": coredns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+
+---
+# Identity API — inbound from gateway only, outbound to DB + Kafka + Redis
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: identity-api
+  namespace: superapp-services
+spec:
+  endpointSelector:
+    matchLabels:
+      app: identity-api
+
+  ingress:
+    # Allow from API gateway
+    - fromEndpoints:
+        - matchLabels:
+            app: api-gateway
+            "k8s:io.kubernetes.pod.namespace": superapp-gateway
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+          rules:
+            http:
+              - method: "POST"
+                path: "/api/v1/auth/.*"
+              - method: "POST"
+                path: "/api/v1/users/.*"
+              - method: "GET"
+                path: "/api/v1/users/.*"
+              - method: "GET"
+                path: "/health/.*"
+              - method: "GET"
+                path: "/metrics"
+
+    # Allow from Prometheus scraping
+    - fromEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: prometheus
+            "k8s:io.kubernetes.pod.namespace": monitoring
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+
+  egress:
+    # Allow to Azure SQL (via private endpoint) — identity DB only
+    - toCIDR:
+        - "10.1.11.0/24"    # private-endpoints subnet
+      toPorts:
+        - ports:
+            - port: "1433"
+              protocol: TCP
+
+    # Allow to Redis
+    - toEndpoints:
+        - matchLabels:
+            app: redis-master
+            "k8s:io.kubernetes.pod.namespace": superapp-data
+      toPorts:
+        - ports:
+            - port: "6380"
+              protocol: TCP
+
+    # Allow to Kafka (Event Hubs via private endpoint)
+    - toCIDR:
+        - "10.1.11.0/24"
+      toPorts:
+        - ports:
+            - port: "9093"
+              protocol: TCP
+
+    # Allow to SPIRE agent (SVID refresh)
+    - toEndpoints:
+        - matchLabels:
+            app: spire-agent
+            "k8s:io.kubernetes.pod.namespace": spire
+      toPorts:
+        - ports:
+            - port: "8081"
+              protocol: TCP
+
+    # Allow to OTel Collector
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: opentelemetry-collector
+            "k8s:io.kubernetes.pod.namespace": monitoring
+      toPorts:
+        - ports:
+            - port: "4317"
+              protocol: TCP
+
+---
+# Payment API — strict rules for PCI-DSS Req.1
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: payment-api
+  namespace: superapp-services
+spec:
+  endpointSelector:
+    matchLabels:
+      app: payment-api
+
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app: api-gateway
+            "k8s:io.kubernetes.pod.namespace": superapp-gateway
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+          rules:
+            http:
+              - method: "POST"
+                path: "/api/v1/payments/.*"
+              - method: "GET"
+                path: "/api/v1/payments/.*"
+              - method: "GET"
+                path: "/health/.*"
+              - method: "GET"
+                path: "/metrics"
+
+    # Allow inbound from wallet-api (intra-service saga coordination)
+    - fromEndpoints:
+        - matchLabels:
+            app: wallet-api
+            "k8s:io.kubernetes.pod.namespace": superapp-services
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+          rules:
+            http:
+              - method: "POST"
+                path: "/internal/.*"
+
+  egress:
+    # Payment DB
+    - toCIDR:
+        - "10.1.11.0/24"
+      toPorts:
+        - ports:
+            - port: "1433"
+              protocol: TCP
+
+    # Redis
+    - toEndpoints:
+        - matchLabels:
+            app: redis-master
+            "k8s:io.kubernetes.pod.namespace": superapp-data
+      toPorts:
+        - ports:
+            - port: "6380"
+              protocol: TCP
+
+    # Kafka / Event Hubs
+    - toCIDR:
+        - "10.1.11.0/24"
+      toPorts:
+        - ports:
+            - port: "9093"
+              protocol: TCP
+
+    # GhIPSS payment rail (FQDN egress policy)
+    - toFQDNs:
+        - matchName: "ghipss.com.gh"
+        - matchName: "api.ghipss.com.gh"
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+
+    # ExpressPay
+    - toFQDNs:
+        - matchName: "expresspay.com.gh"
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+
+    # Hubtel
+    - toFQDNs:
+        - matchName: "api.hubtel.com"
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+
+    # OTel Collector
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: opentelemetry-collector
+            "k8s:io.kubernetes.pod.namespace": monitoring
+      toPorts:
+        - ports:
+            - port: "4317"
+              protocol: TCP
+
+    # SPIRE
+    - toEndpoints:
+        - matchLabels:
+            app: spire-agent
+            "k8s:io.kubernetes.pod.namespace": spire
+      toPorts:
+        - ports:
+            - port: "8081"
+              protocol: TCP
+
+---
+# Wallet API
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: wallet-api
+  namespace: superapp-services
+spec:
+  endpointSelector:
+    matchLabels:
+      app: wallet-api
+
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app: api-gateway
+            "k8s:io.kubernetes.pod.namespace": superapp-gateway
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+
+    - fromEndpoints:
+        - matchLabels:
+            app: payment-api
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+          rules:
+            http:
+              - method: "POST"
+                path: "/internal/.*"
+
+  egress:
+    - toCIDR:
+        - "10.1.11.0/24"
+      toPorts:
+        - ports:
+            - port: "1433"
+              protocol: TCP
+
+    - toEndpoints:
+        - matchLabels:
+            app: redis-master
+            "k8s:io.kubernetes.pod.namespace": superapp-data
+      toPorts:
+        - ports:
+            - port: "6380"
+              protocol: TCP
+
+    - toCIDR:
+        - "10.1.11.0/24"
+      toPorts:
+        - ports:
+            - port: "9093"
+              protocol: TCP
+
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: opentelemetry-collector
+            "k8s:io.kubernetes.pod.namespace": monitoring
+      toPorts:
+        - ports:
+            - port: "4317"
+              protocol: TCP
+
+---
+# API Gateway — inbound from NGINX ingress only
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: api-gateway
+  namespace: superapp-gateway
+spec:
+  endpointSelector:
+    matchLabels:
+      app: api-gateway
+
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: ingress-nginx
+            "k8s:io.kubernetes.pod.namespace": ingress-nginx
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+
+  egress:
+    # Forward to all backend services
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": superapp-services
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+
+    - toEndpoints:
+        - matchLabels:
+            app: redis-master
+            "k8s:io.kubernetes.pod.namespace": superapp-data
+      toPorts:
+        - ports:
+            - port: "6380"
+              protocol: TCP
+
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: opentelemetry-collector
+            "k8s:io.kubernetes.pod.namespace": monitoring
+      toPorts:
+        - ports:
+            - port: "4317"
+              protocol: TCP
+
+---
+# Cluster-wide: deny any pod-to-node-metadata access (IMDS protection)
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: deny-imds-access
+spec:
+  endpointSelector:
+    matchExpressions:
+      - key: "k8s:io.kubernetes.pod.namespace"
+        operator: NotIn
+        values: ["kube-system", "azure-arc", "cert-manager"]
+  egress:
+    - toCIDR:
+        - "169.254.0.0/16"   # Azure IMDS
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+    # Deny by omission — only kube-system pods can reach IMDS

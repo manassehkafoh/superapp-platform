@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <Description>Identity API — registration, authentication, MFA, KYC, JWT issuance</Description>
+    <AssemblyName>SuperApp.IdentityApi</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../shared/SuperApp.Common/SuperApp.Common.csproj" />
+    <ProjectReference Include="../../../shared/SuperApp.Domain/SuperApp.Domain.csproj" />
+    <ProjectReference Include="../../../shared/SuperApp.Messaging/SuperApp.Messaging.csproj" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer"       Version="8.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.0" />
+    <PackageReference Include="MassTransit.Kafka"                             Version="8.2.3" />
+    <PackageReference Include="Azure.Identity"                                Version="1.11.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore"                       Version="6.5.0" />
+  </ItemGroup>
+</Project>

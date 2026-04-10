@@ -1,0 +1,94 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.8.0.0
+
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "shared", "shared", "{A1000001-0000-0000-0000-000000000001}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "services", "services", "{A1000002-0000-0000-0000-000000000002}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{A1000003-0000-0000-0000-000000000003}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "unit", "unit", "{A1000004-0000-0000-0000-000000000004}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "integration", "integration", "{A1000005-0000-0000-0000-000000000005}"
+EndProject
+
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SuperApp.Common", "src\shared\SuperApp.Common\SuperApp.Common.csproj", "{B1000001-0000-0000-0000-000000000001}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SuperApp.Domain", "src\shared\SuperApp.Domain\SuperApp.Domain.csproj", "{B1000002-0000-0000-0000-000000000002}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SuperApp.Messaging", "src\shared\SuperApp.Messaging\SuperApp.Messaging.csproj", "{B1000003-0000-0000-0000-000000000003}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SuperApp.Infrastructure", "src\shared\SuperApp.Infrastructure\SuperApp.Infrastructure.csproj", "{B1000004-0000-0000-0000-000000000004}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SuperApp.Security", "src\shared\SuperApp.Security\SuperApp.Security.csproj", "{B1000005-0000-0000-0000-000000000005}"
+EndProject
+
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SuperApp.PaymentApi", "src\services\payment-api\src\SuperApp.PaymentApi.csproj", "{C1000001-0000-0000-0000-000000000001}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SuperApp.IdentityApi", "src\services\identity-api\src\SuperApp.IdentityApi.csproj", "{C1000002-0000-0000-0000-000000000002}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SuperApp.WalletApi", "src\services\wallet-api\src\SuperApp.WalletApi.csproj", "{C1000003-0000-0000-0000-000000000003}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SuperApp.AccountApi", "src\services\account-api\src\SuperApp.AccountApi.csproj", "{C1000004-0000-0000-0000-000000000004}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SuperApp.NotificationApi", "src\services\notification-api\src\SuperApp.NotificationApi.csproj", "{C1000005-0000-0000-0000-000000000005}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SuperApp.ApiGateway", "src\services\api-gateway\src\SuperApp.ApiGateway.csproj", "{C1000006-0000-0000-0000-000000000006}"
+EndProject
+
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SuperApp.Payment.Tests", "tests\unit\SuperApp.Payment.Tests\SuperApp.Payment.Tests.csproj", "{D1000001-0000-0000-0000-000000000001}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SuperApp.Payment.Integration.Tests", "tests\integration\SuperApp.Payment.Integration.Tests\SuperApp.Payment.Integration.Tests.csproj", "{D1000002-0000-0000-0000-000000000002}"
+EndProject
+
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B1000001-0000-0000-0000-000000000001}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B1000001-0000-0000-0000-000000000001}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B1000001-0000-0000-0000-000000000001}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C1000001-0000-0000-0000-000000000001}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C1000001-0000-0000-0000-000000000001}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C1000001-0000-0000-0000-000000000001}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C1000002-0000-0000-0000-000000000002}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C1000002-0000-0000-0000-000000000002}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C1000003-0000-0000-0000-000000000003}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C1000003-0000-0000-0000-000000000003}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C1000004-0000-0000-0000-000000000004}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C1000004-0000-0000-0000-000000000004}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C1000005-0000-0000-0000-000000000005}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C1000005-0000-0000-0000-000000000005}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C1000006-0000-0000-0000-000000000006}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C1000006-0000-0000-0000-000000000006}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D1000001-0000-0000-0000-000000000001}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D1000001-0000-0000-0000-000000000001}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D1000002-0000-0000-0000-000000000002}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D1000002-0000-0000-0000-000000000002}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{B1000001-0000-0000-0000-000000000001} = {A1000001-0000-0000-0000-000000000001}
+		{B1000002-0000-0000-0000-000000000002} = {A1000001-0000-0000-0000-000000000001}
+		{B1000003-0000-0000-0000-000000000003} = {A1000001-0000-0000-0000-000000000001}
+		{B1000004-0000-0000-0000-000000000004} = {A1000001-0000-0000-0000-000000000001}
+		{B1000005-0000-0000-0000-000000000005} = {A1000001-0000-0000-0000-000000000001}
+		{C1000001-0000-0000-0000-000000000001} = {A1000002-0000-0000-0000-000000000002}
+		{C1000002-0000-0000-0000-000000000002} = {A1000002-0000-0000-0000-000000000002}
+		{C1000003-0000-0000-0000-000000000003} = {A1000002-0000-0000-0000-000000000002}
+		{C1000004-0000-0000-0000-000000000004} = {A1000002-0000-0000-0000-000000000002}
+		{C1000005-0000-0000-0000-000000000005} = {A1000002-0000-0000-0000-000000000002}
+		{C1000006-0000-0000-0000-000000000006} = {A1000002-0000-0000-0000-000000000002}
+		{D1000001-0000-0000-0000-000000000001} = {A1000004-0000-0000-0000-000000000004}
+		{D1000002-0000-0000-0000-000000000002} = {A1000005-0000-0000-0000-000000000005}
+	EndGlobalSection
+EndGlobal
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SuperApp.Wallet.Tests", "tests\unit\SuperApp.Wallet.Tests\SuperApp.Wallet.Tests.csproj", "{D1000003-0000-0000-0000-000000000003}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SuperApp.Identity.Tests", "tests\unit\SuperApp.Identity.Tests\SuperApp.Identity.Tests.csproj", "{D1000004-0000-0000-0000-000000000004}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SuperApp.E2E.Tests", "tests\e2e\SuperApp.E2E.Tests.csproj", "{D1000005-0000-0000-0000-000000000005}"
+EndProject

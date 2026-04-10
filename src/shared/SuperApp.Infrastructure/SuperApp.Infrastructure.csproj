@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><Description>Shared infrastructure: EF Core base repository, outbox pattern, resilience extensions</Description></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../SuperApp.Domain/SuperApp.Domain.csproj" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.0" />
+    <PackageReference Include="Polly.Extensions" Version="8.3.0" />
+  </ItemGroup>
+</Project>

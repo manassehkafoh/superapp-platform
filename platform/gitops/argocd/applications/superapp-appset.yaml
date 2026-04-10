@@ -1,0 +1,384 @@
+# =============================================================================
+# ArgoCD ApplicationSet — SuperApp Multi-Cluster GitOps
+# =============================================================================
+# Purpose: Single ApplicationSet definition that deploys all SuperApp services
+#          to all registered clusters (AKS prod, AKS staging, EKS DR)
+# Pattern: App-of-Apps pattern — this ApplicationSet creates individual
+#          Application CRs for each service × environment × cluster combination
+# Compliance: SOC 2 CC8.1 (Change Management via Git audit trail)
+#             DORA — deployment automation for improved DORA metrics
+# =============================================================================
+
+---
+# Project — namespace/cluster isolation for SuperApp
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: superapp
+  namespace: argocd
+  # Finalizer prevents project deletion while apps exist
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: "SuperApp platform — all microservices and platform components"
+
+  # Source repositories allowed for this project
+  sourceRepos:
+    - "https://github.com/superapp-org/superapp-gitops.git"
+    - "https://github.com/superapp-org/superapp-charts.git"
+    - "https://helm.cilium.io/"
+    - "https://charts.jetstack.io"
+    - "https://argoproj.github.io/argo-helm"
+
+  # Destination clusters and namespaces
+  destinations:
+    - name: "aks-prod-we"          # Azure West Europe
+      namespace: "superapp-*"
+    - name: "aks-prod-ne"          # Azure North Europe
+      namespace: "superapp-*"
+    - name: "eks-dr-ew1"           # AWS eu-west-1
+      namespace: "superapp-*"
+    - name: "aks-staging"
+      namespace: "superapp-*"
+    - name: "aks-dev"
+      namespace: "superapp-*"
+    # Platform components (Cilium, Vault, Prometheus, etc.)
+    - name: "*"
+      namespace: "kube-system"
+    - name: "*"
+      namespace: "vault"
+    - name: "*"
+      namespace: "monitoring"
+    - name: "*"
+      namespace: "argocd"
+
+  # Cluster resource permissions — only what ArgoCD needs
+  clusterResourceWhitelist:
+    - group: "cilium.io"
+      kind: "*"
+    - group: "networking.k8s.io"
+      kind: "*"
+    - group: "rbac.authorization.k8s.io"
+      kind: "ClusterRole"
+    - group: "rbac.authorization.k8s.io"
+      kind: "ClusterRoleBinding"
+    - group: ""
+      kind: "Namespace"
+    - group: ""
+      kind: "PersistentVolume"
+
+  # Namespace resource permissions
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+
+  # Sync windows — restrict production deployments to business hours
+  syncWindows:
+    - kind: "allow"
+      schedule: "0 8 * * 1-5"       # Weekdays 08:00 UTC
+      duration: "8h"
+      applications: ["*"]
+      namespaces: ["superapp-prod*"]
+    - kind: "deny"
+      schedule: "0 0 * * 6-7"       # Weekends
+      duration: "48h"
+      applications: ["*"]
+      namespaces: ["superapp-prod*"]
+      manualSync: true               # Allow manual override for emergencies
+
+  # RBAC — who can manage apps in this project
+  roles:
+    - name: platform-admin
+      description: "Platform team — full control"
+      policies:
+        - p, proj:superapp:platform-admin, applications, *, superapp/*, allow
+      groups:
+        - "platform-team"
+    - name: developer-deploy
+      description: "Developer teams — deploy to dev/staging only"
+      policies:
+        - p, proj:superapp:developer-deploy, applications, sync, superapp/*, allow
+        - p, proj:superapp:developer-deploy, applications, get, superapp/*, allow
+      groups:
+        - "developer-team"
+
+---
+# ApplicationSet: Microservices — deploys all SuperApp microservices
+# Matrix generator: services × clusters (each combination = one ArgoCD Application)
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: superapp-microservices
+  namespace: argocd
+spec:
+  # Fail fast: if any app fails to render/sync, stop processing
+  strategy:
+    type: RollingSync
+    rollingSync:
+      steps:
+        - matchExpressions:
+            - key: env
+              operator: In
+              values: ["dev"]         # Deploy to dev first
+        - matchExpressions:
+            - key: env
+              operator: In
+              values: ["staging"]     # Then staging
+        - matchExpressions:
+            - key: env
+              operator: In
+              values: ["prod"]        # Then production
+
+  generators:
+    - matrix:
+        generators:
+          # Generator 1: Services list
+          - list:
+              elements:
+                - service: identity-service
+                  chart: superapp-identity
+                  port: "8080"
+                  replicaCount: "3"
+                - service: user-service
+                  chart: superapp-user
+                  port: "8080"
+                  replicaCount: "3"
+                - service: transaction-service
+                  chart: superapp-transaction
+                  port: "8080"
+                  replicaCount: "3"
+                - service: notification-service
+                  chart: superapp-notification
+                  port: "8080"
+                  replicaCount: "2"
+                - service: audit-service
+                  chart: superapp-audit
+                  port: "8080"
+                  replicaCount: "2"
+                - service: yarp-gateway
+                  chart: superapp-gateway
+                  port: "8080"
+                  replicaCount: "3"
+
+          # Generator 2: Cluster/environment combinations
+          - list:
+              elements:
+                - cluster: aks-dev
+                  env: dev
+                  namespace: superapp-dev
+                  valuesFile: values-dev.yaml
+                - cluster: aks-staging
+                  env: staging
+                  namespace: superapp-staging
+                  valuesFile: values-staging.yaml
+                - cluster: aks-prod-we
+                  env: prod
+                  namespace: superapp-prod
+                  valuesFile: values-prod.yaml
+                - cluster: eks-dr-ew1
+                  env: prod-dr
+                  namespace: superapp-prod
+                  valuesFile: values-prod-dr.yaml
+
+  template:
+    metadata:
+      # Application name: {service}-{environment}
+      name: "{{service}}-{{env}}"
+      namespace: argocd
+
+      # Labels for sync windows and RBAC matching
+      labels:
+        app: "{{service}}"
+        env: "{{env}}"
+        project: superapp
+        managed-by: argocd
+
+      # Annotations for alerting and tracking
+      annotations:
+        notifications.argoproj.io/subscribe.on-sync-failed.slack: "platform-alerts"
+        notifications.argoproj.io/subscribe.on-health-degraded.slack: "platform-alerts"
+        notifications.argoproj.io/subscribe.on-deployed.slack: "deployments"
+
+      # Finalizer: clean up resources when Application is deleted
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+
+    spec:
+      project: superapp
+
+      source:
+        repoURL: "https://github.com/superapp-org/superapp-charts.git"
+        targetRevision: HEAD
+        path: "charts/{{chart}}"
+
+        helm:
+          # Shared values file + environment-specific override
+          valueFiles:
+            - "values.yaml"
+            - "{{valuesFile}}"
+          # Pass dynamic values at sync time
+          parameters:
+            - name: "image.tag"
+              value: "{{image.tag}}"   # Managed by ArgoCD Image Updater
+            - name: "replicaCount"
+              value: "{{replicaCount}}"
+            - name: "env"
+              value: "{{env}}"
+
+      destination:
+        name: "{{cluster}}"
+        namespace: "{{namespace}}"
+
+      # Sync policy
+      syncPolicy:
+        # Auto-sync for dev/staging; manual approval for prod
+        automated:
+          prune: true      # Remove resources no longer in Git
+          selfHeal: true   # Re-sync if cluster drifts from Git state
+          allowEmpty: false
+        syncOptions:
+          - CreateNamespace=true
+          - PrunePropagationPolicy=foreground
+          - PruneLast=true
+          - ApplyOutOfSyncOnly=true   # Only sync changed resources (faster)
+          - RespectIgnoreDifferences=true
+          - ServerSideApply=true      # Use server-side apply for better conflict handling
+        retry:
+          limit: 5
+          backoff:
+            duration: "5s"
+            factor: 2
+            maxDuration: "3m"
+
+      # Ignore differences that are managed by HPA (auto-scaling)
+      ignoreDifferences:
+        - group: apps
+          kind: Deployment
+          jsonPointers:
+            - /spec/replicas   # HPA manages replica count
+
+      # Health checks — customise per resource type
+      revisionHistoryLimit: 10
+
+---
+# ApplicationSet: Platform Components
+# Deploys Cilium, Vault, Prometheus stack, OPA Gatekeeper, etc.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: superapp-platform-components
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          # All clusters get the same platform stack
+          - cluster: aks-prod-we
+          - cluster: aks-prod-ne
+          - cluster: eks-dr-ew1
+          - cluster: aks-staging
+          - cluster: aks-dev
+
+  template:
+    metadata:
+      name: "platform-{{cluster}}"
+      namespace: argocd
+      labels:
+        component: platform
+        cluster: "{{cluster}}"
+
+    spec:
+      project: superapp
+
+      # App-of-Apps: this application deploys other platform applications
+      source:
+        repoURL: "https://github.com/superapp-org/superapp-gitops.git"
+        targetRevision: HEAD
+        path: "platform/{{cluster}}"  # Cluster-specific platform config
+
+      destination:
+        name: "{{cluster}}"
+        namespace: argocd
+
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+
+---
+# ArgoCD Image Updater — watches ECR/ACR for new image tags
+# Automatically updates image tags in Git (GitOps loop)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argocd-image-updater
+  namespace: argocd
+spec:
+  project: superapp
+  source:
+    repoURL: "https://argoproj.github.io/argo-helm"
+    chart: argocd-image-updater
+    targetRevision: "0.9.6"
+    helm:
+      values: |
+        config:
+          registries:
+            - name: superapp-acr
+              api_url: https://acrsuperapp.azurecr.io
+              prefix: acrsuperapp.azurecr.io
+              credentials: pullsecret:argocd/acr-credentials
+              insecure: false
+            - name: superapp-ecr
+              api_url: https://123456789.dkr.ecr.eu-west-1.amazonaws.com
+              prefix: 123456789.dkr.ecr.eu-west-1.amazonaws.com
+              credentials: ext:/scripts/ecr-login.sh
+        authScripts:
+          enabled: true
+        git:
+          user: "argocd-image-updater"
+          email: "argocd-image-updater@superapp.com"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+
+---
+# Argo Rollouts — progressive delivery (canary + blue-green)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argo-rollouts
+  namespace: argocd
+spec:
+  project: superapp
+  source:
+    repoURL: "https://argoproj.github.io/argo-helm"
+    chart: argo-rollouts
+    targetRevision: "2.37.5"
+    helm:
+      values: |
+        controller:
+          replicas: 2
+          metrics:
+            enabled: true
+            serviceMonitor:
+              enabled: true
+        dashboard:
+          enabled: true
+          ingress:
+            enabled: false  # Expose via port-forward or internal ingress only
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argo-rollouts
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

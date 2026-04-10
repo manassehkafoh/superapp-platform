@@ -1,0 +1,14 @@
+{
+  "ConnectionStrings": {
+    "PaymentDb": "Server=localhost,1433;Database=PaymentDB;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=True",
+    "Redis":     "localhost:6379"
+  },
+  "Messaging": {
+    "BootstrapServers": "localhost:9092",
+    "SchemaRegistryUrl": "http://localhost:8081"
+  },
+  "Auth": {
+    "Authority": "https://login.microsoftonline.com/YOUR_TENANT_ID/v2.0",
+    "Audience":  "api://superapp-payment-api-dev"
+  }
+}

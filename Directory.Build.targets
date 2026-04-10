@@ -1,0 +1,5 @@
+<Project>
+  <Target Name="PrintBuildInfo" BeforeTargets="Build" Condition="'$(CI)' == 'true'">
+    <Message Text="Building: $(MSBuildProjectName) — $(Configuration) — $(TargetFramework)" Importance="High" />
+  </Target>
+</Project>

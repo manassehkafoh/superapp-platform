@@ -1,0 +1,43 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsAsErrors />
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>SuperApp</RootNamespace>
+    <Authors>SuperApp Engineering</Authors>
+    <Company>SuperApp Ghana Ltd</Company>
+    <Copyright>Copyright © 2024 SuperApp Ghana Ltd</Copyright>
+    <RepositoryUrl>https://github.com/superapp-gh/platform</RepositoryUrl>
+
+    <!-- Security: always use latest transport security -->
+    <HttpClientHandlerType>System.Net.Http.SocketsHttpHandler</HttpClientHandlerType>
+
+    <!-- Reproducible builds -->
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <!-- Shared package versions (centralised) -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.0" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting"          Version="1.8.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore"   Version="1.8.0" />
+    <PackageReference Include="OpenTelemetry.Exporter.Otlp"               Version="1.8.0" />
+    <PackageReference Include="Polly.Extensions"                           Version="8.3.0" />
+  </ItemGroup>
+
+  <!-- Code analysis -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="8.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="StyleCop.Analyzers" Version="1.2.0-beta.556">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+</Project>

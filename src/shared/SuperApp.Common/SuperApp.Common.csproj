@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Shared primitives, DTOs, Result types, and cross-cutting utilities</Description>
+  </PropertyGroup>
+</Project>

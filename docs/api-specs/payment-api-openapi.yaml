@@ -1,0 +1,141 @@
+openapi: "3.1.0"
+info:
+  title: SuperApp Payment API
+  version: "1.0.0"
+  description: |
+    Processes payments via GhIPSS, ExpressPay, Hubtel, and internal transfers.
+    All endpoints require a valid Bearer JWT issued by identity-api.
+    Responses are asynchronous — initiation returns 202, result delivered via Kafka event.
+  contact:
+    name: Payments Squad
+    email: payments@superapp.com.gh
+  license: { name: Proprietary }
+
+servers:
+  - url: https://api.superapp.com.gh
+    description: Production
+  - url: https://api.staging.superapp.com.gh
+    description: Staging
+  - url: http://localhost:8080
+    description: Local
+
+security:
+  - BearerAuth: []
+
+paths:
+  /api/v1/payments:
+    post:
+      summary: Initiate a payment
+      operationId: initiatePayment
+      tags: [Payments]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InitiatePaymentRequest'
+            example:
+              sourceWalletId: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+              destinationAccount: "0241234567"
+              amount: 150.00
+              currency: "GHS"
+              paymentRail: "GhIPSS"
+              idempotencyKey: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '202':
+          description: Payment accepted and processing
+          headers:
+            Location:
+              description: URL to poll for payment status
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Business rule violation (e.g. daily limit exceeded)
+        '401':
+          description: Unauthenticated
+        '503':
+          description: Payment rail temporarily unavailable
+
+  /api/v1/payments/{id}:
+    get:
+      summary: Get payment status
+      operationId: getPayment
+      tags: [Payments]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '404':
+          description: Payment not found
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    InitiatePaymentRequest:
+      type: object
+      required: [sourceWalletId, destinationAccount, amount, currency, paymentRail]
+      properties:
+        sourceWalletId:
+          type: string
+          format: uuid
+          description: UUID of the source wallet to debit
+        destinationAccount:
+          type: string
+          maxLength: 50
+          description: Destination mobile money number or bank account
+        amount:
+          type: number
+          format: decimal
+          minimum: 0.01
+          maximum: 100000
+          description: Payment amount (must be positive)
+        currency:
+          type: string
+          enum: [GHS, USD, EUR]
+          description: ISO-4217 currency code
+        paymentRail:
+          type: string
+          enum: [GhIPSS, ExpressPay, Hubtel, InternalTransfer]
+        idempotencyKey:
+          type: string
+          format: uuid
+          description: Client-generated UUID. Re-sending with the same key returns the original response.
+
+    PaymentResponse:
+      type: object
+      properties:
+        paymentId: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [Pending, Debiting, Processing, Completed, Failed, Reversed]
+        externalReference:
+          type: string
+          nullable: true
+          description: Reference ID from the payment rail (populated on Completed)
+
+    ErrorResponse:
+      type: object
+      properties:
+        code:    { type: string, example: "PAY-001" }
+        message: { type: string, example: "Amount must be positive" }

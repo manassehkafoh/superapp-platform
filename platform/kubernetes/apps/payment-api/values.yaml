@@ -1,0 +1,302 @@
+###############################################################################
+# SuperApp Platform — Payment API Helm Values
+# Chart  : superapp-service (generic chart for all microservices)
+# Runtime: .NET 8 minimal API, Argo Rollouts canary strategy
+###############################################################################
+
+replicaCount: 3
+
+image:
+  repository: acrsuperapp.azurecr.io/payment-api
+  tag: ""           # Overridden by ArgoCD image updater
+  pullPolicy: Always
+
+imagePullSecrets:
+  - name: acr-pull-secret
+
+nameOverride: ""
+fullnameOverride: payment-api
+
+serviceAccount:
+  create: false        # Managed by Terraform (identity module)
+  name: payment-api
+  annotations:
+    azure.workload.identity/client-id: ""   # Injected by ESO
+
+# Argo Rollouts — canary deployment strategy (DORA compliance)
+rollout:
+  enabled: true
+  strategy:
+    canary:
+      maxSurge: "25%"
+      maxUnavailable: 0
+      steps:
+        - setWeight: 20
+        - pause: { duration: 5m }
+        - analysis:
+            templates:
+              - templateName: payment-api-success-rate
+        - setWeight: 50
+        - pause: { duration: 5m }
+        - analysis:
+            templates:
+              - templateName: payment-api-success-rate
+        - setWeight: 100
+      canaryService: payment-api-canary
+      stableService: payment-api-stable
+      trafficRouting:
+        nginx:
+          stableIngress: payment-api-stable-ingress
+          annotationPrefix: nginx.ingress.kubernetes.io
+          additionalIngressAnnotations:
+            canary-by-header: X-Canary
+
+# Analysis template for automated rollback
+analysisTemplates:
+  - name: payment-api-success-rate
+    spec:
+      args:
+        - name: service-name
+          value: payment-api
+      metrics:
+        - name: success-rate
+          interval: 1m
+          count: 5
+          successCondition: "result[0] >= 0.999"   # 99.9% SLO
+          failureLimit: 1
+          provider:
+            prometheus:
+              address: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
+              query: |
+                sum(rate(http_requests_total{service="payment-api",code=~"2.."}[5m])) /
+                sum(rate(http_requests_total{service="payment-api"}[5m]))
+
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+  metricsPort: 9090
+
+ingress:
+  enabled: false      # Routed via api-gateway, not direct ingress
+
+# Pod spec
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port:   "9090"
+  prometheus.io/path:   "/metrics"
+  sidecar.istio.io/inject: "false"           # Using Cilium mTLS, not Istio
+  instrumentation.opentelemetry.io/inject-dotnet: "true"
+
+podLabels:
+  app:                  payment-api
+  version:              "{{ .Values.image.tag }}"
+  "azure.workload.identity/use": "true"
+  "app.kubernetes.io/part-of": superapp-platform
+  pci-scope: "true"     # PCI-DSS scoped workload label
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser:    1000
+  runAsGroup:   1000
+  fsGroup:      1000
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem:   true
+  runAsNonRoot:             true
+  capabilities:
+    drop: ["ALL"]
+
+resources:
+  requests:
+    memory: "256Mi"
+    cpu:    "250m"
+  limits:
+    memory: "512Mi"
+    cpu:    "1000m"
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+  targetCPUUtilizationPercentage:    70
+  targetMemoryUtilizationPercentage: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type:          Pods
+          value:         4
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type:          Pods
+          value:         2
+          periodSeconds: 120
+
+# Disruption budget — maintain quorum during rolling updates
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+# Topology spread — ensure pods across AZs and nodes
+topologySpreadConstraints:
+  - maxSkew:           1
+    topologyKey:       topology.kubernetes.io/zone
+    whenUnsatisfiable: DoNotSchedule
+    labelSelector:
+      matchLabels:
+        app: payment-api
+  - maxSkew:           1
+    topologyKey:       kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app: payment-api
+
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchLabels:
+            app: payment-api
+        topologyKey: kubernetes.io/hostname
+
+tolerations:
+  - key:      workload
+    operator: Equal
+    value:    app
+    effect:   NoSchedule
+
+nodeSelector:
+  agentpool: app
+
+# Health probes
+livenessProbe:
+  httpGet:
+    path:   /health/live
+    port:   8080
+    scheme: HTTP
+  initialDelaySeconds: 30
+  periodSeconds:       10
+  timeoutSeconds:      5
+  failureThreshold:    3
+
+readinessProbe:
+  httpGet:
+    path:   /health/ready
+    port:   8080
+    scheme: HTTP
+  initialDelaySeconds: 10
+  periodSeconds:       5
+  timeoutSeconds:      3
+  failureThreshold:    3
+
+startupProbe:
+  httpGet:
+    path:   /health/startup
+    port:   8080
+    scheme: HTTP
+  initialDelaySeconds: 5
+  periodSeconds:       5
+  failureThreshold:    30   # Allow up to 150s startup
+
+# Environment — non-sensitive values only; secrets via ESO
+env:
+  - name:  ASPNETCORE_ENVIRONMENT
+    value: "{{ .Values.global.environment }}"
+  - name:  ASPNETCORE_URLS
+    value: "http://+:8080"
+  - name:  OTEL_EXPORTER_OTLP_ENDPOINT
+    value: "http://opentelemetry-collector.monitoring.svc.cluster.local:4317"
+  - name:  OTEL_SERVICE_NAME
+    value: "payment-api"
+  - name:  OTEL_RESOURCE_ATTRIBUTES
+    value: "k8s.namespace.name=$(NAMESPACE),k8s.pod.name=$(POD_NAME)"
+  - name:  KAFKA_BOOTSTRAP_SERVERS
+    valueFrom:
+      secretKeyRef:
+        name: payment-api-secrets
+        key:  KAFKA_BOOTSTRAP_SERVERS
+  - name:  NAMESPACE
+    valueFrom:
+      fieldRef:
+        fieldPath: metadata.namespace
+  - name:  POD_NAME
+    valueFrom:
+      fieldRef:
+        fieldPath: metadata.name
+
+# Volumes for tmp (ReadOnlyRootFS requires writable tmp)
+volumes:
+  - name: tmp
+    emptyDir: {}
+  - name: secrets-store
+    csi:
+      driver:   secrets-store.csi.k8s.io
+      readOnly: true
+      volumeAttributes:
+        secretProviderClass: payment-api-secrets
+
+volumeMounts:
+  - name:      tmp
+    mountPath: /tmp
+  - name:      secrets-store
+    mountPath: /mnt/secrets-store
+    readOnly:  true
+
+# ExternalSecret — syncs from Azure Key Vault
+externalSecrets:
+  enabled: true
+  refreshInterval: "5m"
+  secretStoreRef:
+    name: azure-keyvault-store
+    kind: ClusterSecretStore
+  data:
+    - secretKey: CONNECTION_STRING__PaymentDb
+      remoteRef:
+        key: payment-db-connectionstring
+    - secretKey: REDIS__Password
+      remoteRef:
+        key: redis-password
+    - secretKey: KAFKA_BOOTSTRAP_SERVERS
+      remoteRef:
+        key: eventhub-bootstrap-servers
+    - secretKey: KAFKA__SaslPassword
+      remoteRef:
+        key: eventhub-producer-connstring
+    - secretKey: GHIPSS__ApiKey
+      remoteRef:
+        key: ghipss-api-key
+    - secretKey: EXPRESSPAY__ApiKey
+      remoteRef:
+        key: expresspay-api-key
+    - secretKey: HUBTEL__ClientId
+      remoteRef:
+        key: hubtel-client-id
+    - secretKey: HUBTEL__ClientSecret
+      remoteRef:
+        key: hubtel-client-secret
+
+# SecretProviderClass for CSI driver (alternative mount mechanism)
+secretProviderClass:
+  enabled: true
+  provider: azure
+  parameters:
+    usePodIdentity: "false"
+    useVMManagedIdentity: "false"
+    clientID: ""    # Injected by Terraform
+    keyvaultName: "" # Injected by Terraform
+    tenantId: ""    # Injected by Terraform
+    objects: |
+      array:
+        - |
+          objectName: payment-db-connectionstring
+          objectType: secret
+        - |
+          objectName: ghipss-api-key
+          objectType: secret
