@@ -1,0 +1,20 @@
+http.host: "0.0.0.0"
+http.port: 9600
+
+pipeline.id: main
+pipeline.workers: 4
+pipeline.batch.size: 500
+pipeline.batch.delay: 50
+
+queue.type: persisted
+queue.max_bytes: 4gb
+queue.checkpoint.writes: 1024
+
+dead_letter_queue.enable: true
+dead_letter_queue.max_bytes: 1gb
+
+log.level: info
+log.format: json
+
+path.logs: /var/log/logstash
+path.data: /var/lib/logstash

@@ -1,0 +1,164 @@
+###############################################################################
+# SuperApp — Prometheus Recording Rules
+# Mobile App KPIs aligned to Republic Bank Ghana KPI Framework
+# Source: Republic_Bank_Ghana_KPIs_for_Channels.docx
+###############################################################################
+groups:
+
+  # ── Digital Channel (Mobile App) KPIs ──────────────────────────────────
+  - name: superapp.mobile.kpis
+    interval: 60s
+    rules:
+
+      # KPI-1: Active Users Ratio = Active users ÷ Total registered users (%)
+      - record: superapp:mobile_active_users_ratio
+        expr: |
+          (
+            count(increase(superapp_user_login_total[30d]) > 0)
+          /
+            count(superapp_registered_users_total) * 100
+          ) or vector(0)
+
+      # KPI-2: Adoption Rate = New digital enrollments ÷ Total customers (%)
+      - record: superapp:mobile_adoption_rate
+        expr: |
+          (
+            increase(superapp_user_registrations_total[30d])
+          /
+            sum(superapp_total_bank_customers) * 100
+          ) or vector(0)
+
+      # KPI-3: Transaction Volume (total per day / hour)
+      - record: superapp:mobile_transaction_volume_hourly
+        expr: increase(superapp_payment_transactions_total[1h])
+
+      - record: superapp:mobile_transaction_volume_daily
+        expr: increase(superapp_payment_transactions_total[24h])
+
+      # KPI-4: Transaction Value (GHS)
+      - record: superapp:mobile_transaction_value_ghs_hourly
+        expr: increase(superapp_payment_transaction_value_ghs_total[1h])
+
+      - record: superapp:mobile_transaction_value_ghs_daily
+        expr: increase(superapp_payment_transaction_value_ghs_total[24h])
+
+      # KPI-5: System Availability (%) — based on health check probe
+      - record: superapp:mobile_system_availability_percent
+        expr: |
+          avg_over_time(
+            up{job=~"identity-api|payment-api|wallet-api|api-gateway"}[24h]
+          ) * 100
+
+      # Per-service availability
+      - record: superapp:service_availability_percent
+        expr: avg_over_time(up[24h]) * 100
+
+      # KPI-6: Failed Transaction Rate = Failed ÷ Total (%)
+      - record: superapp:mobile_failed_transaction_rate
+        expr: |
+          (
+            rate(superapp_payment_transactions_total{status="failed"}[5m])
+          /
+            rate(superapp_payment_transactions_total[5m]) * 100
+          ) or vector(0)
+
+      # KPI-7: Average Login Frequency = Logins per active customer per month
+      - record: superapp:mobile_avg_login_frequency
+        expr: |
+          increase(superapp_user_login_total[30d])
+          /
+          count(increase(superapp_user_login_total[30d]) > 0)
+
+      # KPI-8: Customer Satisfaction / NPS
+      - record: superapp:mobile_nps_score
+        expr: avg(superapp_nps_score_gauge)
+
+      # ── Derived performance metrics ───────────────────────────────────
+      # API response time percentiles (p50, p95, p99)
+      - record: superapp:api_latency_p50_ms
+        expr: |
+          histogram_quantile(0.50,
+            sum by (service, le)(
+              rate(http_server_request_duration_seconds_bucket[5m])
+            )
+          ) * 1000
+
+      - record: superapp:api_latency_p95_ms
+        expr: |
+          histogram_quantile(0.95,
+            sum by (service, le)(
+              rate(http_server_request_duration_seconds_bucket[5m])
+            )
+          ) * 1000
+
+      - record: superapp:api_latency_p99_ms
+        expr: |
+          histogram_quantile(0.99,
+            sum by (service, le)(
+              rate(http_server_request_duration_seconds_bucket[5m])
+            )
+          ) * 1000
+
+      # Payment success rate (inversion of failure rate)
+      - record: superapp:payment_success_rate_percent
+        expr: |
+          (
+            1 - (
+              rate(superapp_payment_transactions_total{status="failed"}[5m])
+              / rate(superapp_payment_transactions_total[5m])
+            )
+          ) * 100
+
+      # Session activity
+      - record: superapp:active_sessions_total
+        expr: sum(superapp_active_sessions_gauge)
+
+      # Wallet balance metrics
+      - record: superapp:total_wallet_balance_ghs
+        expr: sum(superapp_wallet_balance_ghs_gauge)
+
+      # Channel migration rate = digital txns ÷ (digital + branch txns)
+      - record: superapp:channel_migration_rate_percent
+        expr: |
+          (
+            rate(superapp_payment_transactions_total{channel="digital"}[24h])
+            /
+            (
+              rate(superapp_payment_transactions_total{channel="digital"}[24h])
+              + rate(superapp_payment_transactions_total{channel="branch"}[24h])
+            )
+          ) * 100
+
+  # ── Kafka / Messaging health ────────────────────────────────────────────
+  - name: superapp.kafka.kpis
+    interval: 30s
+    rules:
+      - record: superapp:kafka_consumer_lag_total
+        expr: sum(kafka_consumer_group_lag) by (topic, consumer_group)
+
+      - record: superapp:kafka_message_throughput
+        expr: sum(rate(kafka_topic_messages_in_total[5m])) by (topic)
+
+  # ── SLO burn-rate rules ────────────────────────────────────────────────
+  - name: superapp.slo.burn_rate
+    interval: 30s
+    rules:
+      # Fast burn: 14.4× threshold over 1h → burns 1-day error budget in 2h
+      - record: superapp:payment_slo_burn_rate_1h
+        expr: |
+          rate(superapp_payment_transactions_total{status="failed"}[1h])
+          / rate(superapp_payment_transactions_total[1h])
+
+      # Slow burn: 6× threshold over 6h → burns 1-day budget in 4h
+      - record: superapp:payment_slo_burn_rate_6h
+        expr: |
+          rate(superapp_payment_transactions_total{status="failed"}[6h])
+          / rate(superapp_payment_transactions_total[6h])
+
+      # Error budget remaining (99.9% SLO = 0.1% error budget)
+      - record: superapp:payment_error_budget_remaining
+        expr: |
+          1 - (
+            increase(superapp_payment_transactions_total{status="failed"}[30d])
+            / increase(superapp_payment_transactions_total[30d])
+          ) / 0.001

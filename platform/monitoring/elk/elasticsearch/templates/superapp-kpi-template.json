@@ -1,0 +1,104 @@
+{
+  "index_patterns": ["superapp-kpi-*", "superapp-transactions-*", "superapp-logs-*"],
+  "template": {
+    "settings": {
+      "number_of_shards": 2,
+      "number_of_replicas": 1,
+      "index.lifecycle.name": "superapp-kpi-ilm",
+      "index.lifecycle.rollover_alias": "superapp-kpi-write",
+      "index.codec": "best_compression",
+      "analysis": {
+        "analyzer": {
+          "custom_path": {
+            "type": "custom",
+            "tokenizer": "path_hierarchy"
+          }
+        }
+      }
+    },
+    "mappings": {
+      "dynamic": "true",
+      "properties": {
+        "@timestamp":      { "type": "date", "format": "strict_date_optional_time||epoch_millis" },
+        "environment":     { "type": "keyword" },
+        "service":         { "type": "keyword" },
+        "level":           { "type": "keyword" },
+        "message":         { "type": "text", "fields": { "keyword": { "type": "keyword", "ignore_above": 512 } } },
+        "correlationId":   { "type": "keyword" },
+        "traceId":         { "type": "keyword" },
+        "spanId":          { "type": "keyword" },
+
+        "kpi": {
+          "properties": {
+            "name":        { "type": "keyword" },
+            "value":       { "type": "double" },
+            "unit":        { "type": "keyword" },
+            "target":      { "type": "double" },
+            "variance":    { "type": "double" },
+            "status":      { "type": "keyword" },
+            "channel":     { "type": "keyword" }
+          }
+        },
+
+        "transaction": {
+          "properties": {
+            "id":          { "type": "keyword" },
+            "type":        { "type": "keyword" },
+            "status":      { "type": "keyword" },
+            "amount":      { "type": "double" },
+            "currency":    { "type": "keyword" },
+            "channel":     { "type": "keyword" },
+            "rail":        { "type": "keyword" },
+            "duration_ms": { "type": "long" },
+            "userId":      { "type": "keyword" }
+          }
+        },
+
+        "user": {
+          "properties": {
+            "id":          { "type": "keyword" },
+            "tier":        { "type": "keyword" },
+            "kycLevel":    { "type": "keyword" },
+            "action":      { "type": "keyword" }
+          }
+        },
+
+        "http": {
+          "properties": {
+            "method":         { "type": "keyword" },
+            "url":            { "type": "keyword" },
+            "status_code":    { "type": "integer" },
+            "response_ms":    { "type": "long" },
+            "request_size":   { "type": "long" },
+            "response_size":  { "type": "long" }
+          }
+        },
+
+        "error": {
+          "properties": {
+            "code":     { "type": "keyword" },
+            "message":  { "type": "text" },
+            "type":     { "type": "keyword" },
+            "stack":    { "type": "text", "index": false }
+          }
+        },
+
+        "geo": {
+          "properties": {
+            "country":  { "type": "keyword" },
+            "region":   { "type": "keyword" },
+            "city":     { "type": "keyword" }
+          }
+        },
+
+        "device": {
+          "properties": {
+            "type":     { "type": "keyword" },
+            "os":       { "type": "keyword" },
+            "version":  { "type": "keyword" }
+          }
+        }
+      }
+    }
+  }
+}

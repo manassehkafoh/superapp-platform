@@ -1,0 +1,70 @@
+apiVersion: 1
+datasources:
+
+  # Prometheus — metrics (KPI calculations, SLO burn rates)
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+    jsonData:
+      timeInterval: "15s"
+      incrementalQuerying: true
+      cacheLevel: High
+
+  # Elasticsearch — log analytics, event search, KPI trend data
+  - name: Elasticsearch
+    type: elasticsearch
+    access: proxy
+    url: http://elasticsearch:9200
+    database: superapp-*
+    editable: true
+    jsonData:
+      esVersion: "8.0.0"
+      timeField: "@timestamp"
+      interval: Daily
+      logMessageField: message
+      logLevelField: level
+      maxConcurrentShardRequests: 5
+      includeFrozen: false
+
+  # Elasticsearch — dedicated KPI events index
+  - name: Elasticsearch-KPI
+    type: elasticsearch
+    access: proxy
+    url: http://elasticsearch:9200
+    database: superapp-kpi-*
+    editable: true
+    jsonData:
+      esVersion: "8.0.0"
+      timeField: "@timestamp"
+      interval: Daily
+
+  # Loki — structured application logs
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: true
+    jsonData:
+      derivedFields:
+        - datasourceUid: Tempo
+          matcherRegex: "traceId=(\\w+)"
+          name: TraceID
+          url: "$${__value.raw}"
+
+  # Tempo — distributed traces
+  - name: Tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    uid: Tempo
+    editable: true
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: Loki
+        spanStartTimeShift: "-5m"
+        spanEndTimeShift: "5m"
+      serviceMap: { datasourceUid: Prometheus }
+      nodeGraph: { enabled: true }

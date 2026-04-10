@@ -1,0 +1,116 @@
+###############################################################################
+# SuperApp — Alerting Rules
+# KPI threshold alerts tied to Republic Bank Ghana KPI targets
+###############################################################################
+groups:
+
+  - name: superapp.mobile.slo.alerts
+    rules:
+
+      # CRITICAL: Payment SLO breach — error rate > 0.1%
+      - alert: PaymentSLOBreach
+        expr: superapp:mobile_failed_transaction_rate > 0.1
+        for: 2m
+        labels:
+          severity: critical
+          team:     payments
+          kpi:      KPI-6-FailedTransactionRate
+        annotations:
+          summary: "Payment error rate {{ $value | printf \"%.3f\" }}% exceeds 0.1% SLO"
+          description: |
+            Mobile payment failed transaction rate is {{ $value | printf \"%.2f\" }}%
+            KPI Target: < 0.1% | Current: {{ $value | printf \"%.3f\" }}%
+            Dashboard: https://grafana.superapp.com.gh/d/mobile-kpis
+
+      # WARNING: Fast SLO burn (14.4× budget consumed)
+      - alert: PaymentSLOFastBurn
+        expr: superapp:payment_slo_burn_rate_1h > 0.00144
+        for: 5m
+        labels:
+          severity: warning
+          team:     payments
+          kpi:      KPI-6-FailedTransactionRate
+        annotations:
+          summary: "Payment SLO fast burn — error budget being consumed rapidly"
+          description: "At current rate, monthly error budget will be exhausted in ~2 hours"
+
+      # CRITICAL: System unavailability
+      - alert: MobileServiceDown
+        expr: superapp:mobile_system_availability_percent < 99.5
+        for: 1m
+        labels:
+          severity: critical
+          team:     platform
+          kpi:      KPI-5-SystemAvailability
+        annotations:
+          summary: "Mobile service availability {{ $value | printf \"%.2f\" }}% below 99.9% SLO"
+          description: "KPI-5 Target: 99.9% | Current: {{ $value | printf \"%.3f\" }}%"
+
+      # WARNING: High API latency (p99 > 2000ms)
+      - alert: MobileHighLatency
+        expr: superapp:api_latency_p99_ms{service=~"payment-api|wallet-api"} > 2000
+        for: 5m
+        labels:
+          severity: warning
+          team:     platform
+          kpi:      APILatency
+        annotations:
+          summary: "{{ $labels.service }} p99 latency {{ $value | printf \"%.0f\" }}ms > 2000ms SLO"
+
+      # WARNING: Active Users Ratio drops below 30%
+      - alert: LowActiveUsersRatio
+        expr: superapp:mobile_active_users_ratio < 30
+        for: 60m
+        labels:
+          severity: warning
+          team:     product
+          kpi:      KPI-1-ActiveUsersRatio
+        annotations:
+          summary: "Mobile active users ratio {{ $value | printf \"%.1f\" }}% below 30% threshold"
+          description: |
+            KPI-1: Active Users Ratio has dropped to {{ $value | printf \"%.1f\" }}%
+            This may indicate engagement issues or onboarding drop-off.
+
+      # WARNING: Failed transaction rate spike
+      - alert: HighFailedTransactionRate
+        expr: superapp:mobile_failed_transaction_rate > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          team:     payments
+          kpi:      KPI-6-FailedTransactionRate
+        annotations:
+          summary: "Failed transaction rate {{ $value | printf \"%.2f\" }}% > 0.5% warning threshold"
+
+      # CRITICAL: Kafka consumer lag — payment processing backlog
+      - alert: PaymentKafkaLagCritical
+        expr: superapp:kafka_consumer_lag_total{topic="superapp-payment-source"} > 10000
+        for: 5m
+        labels:
+          severity: critical
+          team:     payments
+          kpi:      PaymentProcessingLag
+        annotations:
+          summary: "Payment Kafka lag {{ $value }} messages — risk of delayed transactions"
+
+      # INFO: Daily login frequency drop
+      - alert: LowLoginFrequency
+        expr: superapp:mobile_avg_login_frequency < 3
+        for: 1d
+        labels:
+          severity: info
+          team:     product
+          kpi:      KPI-7-LoginFrequency
+        annotations:
+          summary: "Average login frequency {{ $value | printf \"%.1f\" }}x/month below 3x target"
+
+      # WARNING: Adoption rate slowing
+      - alert: LowAdoptionRate
+        expr: superapp:mobile_adoption_rate < 2
+        for: 7d
+        labels:
+          severity: warning
+          team:     product
+          kpi:      KPI-2-AdoptionRate
+        annotations:
+          summary: "Mobile adoption rate {{ $value | printf \"%.1f\" }}% below 2% monthly target"

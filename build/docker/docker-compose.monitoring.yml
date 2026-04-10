@@ -1,0 +1,204 @@
+###############################################################################
+# SuperApp — Monitoring Stack (Grafana + ELK + Prometheus)
+# For local development and staging validation.
+# Usage: docker compose -f build/docker/docker-compose.monitoring.yml up -d
+###############################################################################
+version: "3.9"
+
+x-elastic-env: &elastic-env
+  ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:-SuperApp@Elastic2024}
+  KIBANA_SYSTEM_PASSWORD: ${KIBANA_PASSWORD:-SuperApp@Kibana2024}
+
+services:
+
+  # ── Elasticsearch ──────────────────────────────────────────────────────────
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+    container_name: superapp-elasticsearch
+    environment:
+      <<: *elastic-env
+      cluster.name:           superapp-cluster
+      node.name:              es-node-1
+      discovery.type:         single-node
+      bootstrap.memory_lock:  "true"
+      xpack.security.enabled: "true"
+      xpack.security.http.ssl.enabled: "false"
+      ES_JAVA_OPTS: "-Xms1g -Xmx1g"
+      ELASTIC_USERNAME: elastic
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+      nofile:  { soft: 65536, hard: 65536 }
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -u elastic:${ELASTIC_PASSWORD:-SuperApp@Elastic2024} http://localhost:9200/_cluster/health | grep -q 'green\\|yellow'"]
+      interval: 30s
+      retries: 10
+
+  # ── Kibana ─────────────────────────────────────────────────────────────────
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.13.0
+    container_name: superapp-kibana
+    depends_on:
+      elasticsearch: { condition: service_healthy }
+    environment:
+      ELASTICSEARCH_HOSTS:    http://elasticsearch:9200
+      ELASTICSEARCH_USERNAME: kibana_system
+      ELASTICSEARCH_PASSWORD: ${KIBANA_PASSWORD:-SuperApp@Kibana2024}
+      SERVER_NAME:            superapp-kibana
+      XPACK_SECURITY_ENABLED: "true"
+      XPACK_FLEET_ENABLED:    "false"
+      KIBANA_REPORTING_ROLES_ENABLED: "false"
+    ports:
+      - "5601:5601"
+    healthcheck:
+      test: ["CMD", "curl", "-s", "http://localhost:5601/api/status"]
+      interval: 30s
+      retries: 10
+
+  # ── Logstash ───────────────────────────────────────────────────────────────
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.13.0
+    container_name: superapp-logstash
+    depends_on:
+      elasticsearch: { condition: service_healthy }
+    environment:
+      ELASTICSEARCH_HOST:     elasticsearch
+      ELASTICSEARCH_USERNAME: elastic
+      ELASTICSEARCH_PASSWORD: ${ELASTIC_PASSWORD:-SuperApp@Elastic2024}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_USERNAME:          superapp-logstash
+      KAFKA_PASSWORD:          ${KAFKA_PASSWORD:-}
+      LS_JAVA_OPTS:            "-Xms512m -Xmx512m"
+    ports:
+      - "5044:5044"   # Beats input
+      - "8080:8080"   # HTTP input
+      - "9600:9600"   # Logstash monitoring API
+    volumes:
+      - ./platform/monitoring/elk/logstash/pipeline:/usr/share/logstash/pipeline:ro
+      - ./platform/monitoring/elk/logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml:ro
+      - ./platform/monitoring/elk/logstash/config/pipelines.yml:/usr/share/logstash/config/pipelines.yml:ro
+      - logstash_data:/var/lib/logstash
+    healthcheck:
+      test: ["CMD", "curl", "-s", "http://localhost:9600/_node/stats"]
+      interval: 30s
+      retries: 10
+
+  # ── Prometheus ─────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: superapp-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.console.libraries=/etc/prometheus/console_libraries
+      - --web.console.templates=/etc/prometheus/consoles
+      - --storage.tsdb.retention.time=30d
+      - --web.enable-lifecycle
+      - --web.enable-admin-api
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./platform/monitoring/prometheus:/etc/prometheus:ro
+      - prometheus_data:/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/healthy"]
+      interval: 15s
+
+  # ── AlertManager ───────────────────────────────────────────────────────────
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: superapp-alertmanager
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./platform/monitoring/prometheus/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+
+  # ── Grafana ────────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: superapp-grafana
+    depends_on:
+      - prometheus
+      - elasticsearch
+      - loki
+      - tempo
+    environment:
+      GF_SECURITY_ADMIN_USER:     admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-SuperApp@Grafana2024}
+      GF_USERS_ALLOW_SIGN_UP:     "false"
+      GF_SERVER_ROOT_URL:         http://localhost:3000
+      GF_INSTALL_PLUGINS:         grafana-elasticsearch-datasource,grafana-worldmap-panel,natel-discrete-panel
+      GF_FEATURE_TOGGLES_ENABLE:  tempoSearch,tempoServiceGraph,traceToMetrics
+      GF_UNIFIED_ALERTING_ENABLED: "true"
+      GF_ALERTING_ENABLED:        "false"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./platform/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./platform/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+
+  # ── Loki ────────────────────────────────────────────────────────────────────
+  loki:
+    image: grafana/loki:3.0.0
+    container_name: superapp-loki
+    command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki_data:/loki
+
+  # ── Tempo ───────────────────────────────────────────────────────────────────
+  tempo:
+    image: grafana/tempo:2.4.0
+    container_name: superapp-tempo
+    command: ["-config.file=/etc/tempo.yaml"]
+    ports:
+      - "3200:3200"
+      - "4317:4317"   # OTLP gRPC
+    volumes:
+      - tempo_data:/tmp/tempo
+
+  # ── OTel Collector ──────────────────────────────────────────────────────────
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.99.0
+    container_name: superapp-otel-collector
+    command: ["--config=/etc/otel/config.yaml"]
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+      - elasticsearch
+    ports:
+      - "4318:4318"   # OTLP HTTP
+      - "8889:8889"   # Prometheus exporter
+      - "13133:13133" # Health check
+    volumes:
+      - ./platform/monitoring/otel/otel-collector-config.yaml:/etc/otel/config.yaml:ro
+    environment:
+      ELASTICSEARCH_USERNAME: elastic
+      ELASTICSEARCH_PASSWORD: ${ELASTIC_PASSWORD:-SuperApp@Elastic2024}
+
+  # ── Prometheus Pushgateway (for batch/DORA metrics) ──────────────────────
+  prometheus-pushgateway:
+    image: prom/pushgateway:v1.8.0
+    container_name: superapp-pushgateway
+    ports:
+      - "9091:9091"
+
+volumes:
+  elasticsearch_data:
+  logstash_data:
+  prometheus_data:
+  alertmanager_data:
+  grafana_data:
+  loki_data:
+  tempo_data:

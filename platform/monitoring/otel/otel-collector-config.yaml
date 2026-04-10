@@ -1,0 +1,191 @@
+###############################################################################
+# OpenTelemetry Collector — SuperApp KPI Pipeline
+# Routes: metrics → Prometheus, logs → Loki + Elasticsearch, traces → Tempo
+###############################################################################
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  pprof:
+    endpoint: 0.0.0.0:1777
+  zpages:
+    endpoint: 0.0.0.0:55679
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+        max_recv_msg_size_mib: 20
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # Prometheus scrape (for services that expose /metrics)
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: payment-api
+          scrape_interval: 15s
+          kubernetes_sd_configs:
+            - role: pod
+              namespaces: { names: [superapp-services] }
+          relabel_configs:
+            - source_labels: [__meta_kubernetes_pod_label_app]
+              regex: payment-api
+              action: keep
+        - job_name: wallet-api
+          scrape_interval: 15s
+          kubernetes_sd_configs:
+            - role: pod
+              namespaces: { names: [superapp-services] }
+          relabel_configs:
+            - source_labels: [__meta_kubernetes_pod_label_app]
+              regex: wallet-api
+              action: keep
+        - job_name: identity-api
+          scrape_interval: 15s
+          kubernetes_sd_configs:
+            - role: pod
+              namespaces: { names: [superapp-services] }
+          relabel_configs:
+            - source_labels: [__meta_kubernetes_pod_label_app]
+              regex: identity-api
+              action: keep
+
+  # K8s cluster metrics
+  k8s_cluster:
+    auth_type: serviceAccount
+    node_conditions_to_report: [Ready, MemoryPressure, DiskPressure]
+    metadata_exporters: [prometheus]
+
+processors:
+  # Memory limiter — prevents OOM
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 75
+    spike_limit_percentage: 15
+
+  # Batch for efficiency
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+    send_batch_max_size: 2048
+
+  # Resource attributes (add Kubernetes pod/namespace labels)
+  resource:
+    attributes:
+      - key: deployment.environment
+        from_attribute: k8s.namespace.name
+        action: upsert
+
+  # PII scrubbing — remove sensitive log attributes
+  attributes/pii-scrub:
+    actions:
+      - key: user.email
+        action: delete
+      - key: user.phone
+        action: delete
+      - key: payment.card_number
+        action: delete
+      - key: password
+        action: delete
+      - key: token
+        action: delete
+
+  # Filter: drop health check traces (noisy)
+  filter/health-checks:
+    traces:
+      span:
+        - 'attributes["http.route"] == "/health/live"'
+        - 'attributes["http.route"] == "/health/ready"'
+
+  # Transform: add KPI labels to payment metrics
+  transform/kpi-labels:
+    metric_statements:
+      - context: datapoint
+        statements:
+          - set(attributes["kpi.category"], "mobile_banking") where metric.name == "superapp_payment_transactions_total"
+          - set(attributes["kpi.id"], "KPI-3") where metric.name == "superapp_payment_transactions_total"
+          - set(attributes["kpi.id"], "KPI-4") where metric.name == "superapp_payment_transaction_value_ghs_total"
+          - set(attributes["kpi.id"], "KPI-6") where metric.name == "superapp_payment_transactions_failed_total"
+
+exporters:
+  # Prometheus remote write → Azure Monitor Managed Prometheus
+  prometheusremotewrite:
+    endpoint: "${AZURE_MONITOR_PROMETHEUS_ENDPOINT}"
+    headers:
+      Authorization: "Bearer ${AZURE_MONITOR_TOKEN}"
+    tls:
+      insecure: false
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+
+  # Prometheus exposition (scraped by local Prometheus)
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+    namespace: superapp
+
+  # Loki — structured application logs
+  loki:
+    endpoint: http://loki:3100/loki/api/v1/push
+    labels:
+      resource:
+        - service.name
+        - k8s.namespace.name
+        - k8s.pod.name
+      attributes:
+        - level
+        - http.status_code
+
+  # Elasticsearch — KPI events and business logs
+  elasticsearch:
+    endpoints: ["https://elasticsearch:9200"]
+    user: "${ELASTICSEARCH_USERNAME}"
+    password: "${ELASTICSEARCH_PASSWORD}"
+    index: superapp-otel-%{+YYYY.MM.dd}
+    mapping:
+      mode: ecs
+    logs_index: superapp-logs-%{+YYYY.MM.dd}
+    traces_index: superapp-traces-%{+YYYY.MM.dd}
+    tls:
+      insecure_skip_verify: false
+      ca_file: /etc/otel/certs/ca.crt
+    retry:
+      enabled: true
+      initial_interval: 1s
+      max_retries: 5
+
+  # Tempo — distributed traces
+  otlp/tempo:
+    endpoint: http://tempo:4317
+    tls:
+      insecure: true
+
+  # Logging — debug only
+  debug:
+    verbosity: normal
+    sampling_initial: 5
+    sampling_thereafter: 200
+
+service:
+  extensions: [health_check, pprof, zpages]
+
+  pipelines:
+    # Metrics: OTel SDK → Prometheus → Grafana
+    metrics:
+      receivers:  [otlp, prometheus, k8s_cluster]
+      processors: [memory_limiter, batch, resource, transform/kpi-labels]
+      exporters:  [prometheusremotewrite, prometheus]
+
+    # Logs: OTel SDK → Loki (Grafana) + Elasticsearch (Kibana)
+    logs:
+      receivers:  [otlp]
+      processors: [memory_limiter, batch, resource, attributes/pii-scrub]
+      exporters:  [loki, elasticsearch]
+
+    # Traces: OTel SDK → Tempo → Grafana
+    traces:
+      receivers:  [otlp]
+      processors: [memory_limiter, batch, filter/health-checks, resource]
+      exporters:  [otlp/tempo]

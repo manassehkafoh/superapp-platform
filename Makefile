@@ -201,3 +201,38 @@ deploy-prod: ## Deploy to production (requires ITSM ticket)
 
 deploy-dry-run: ## Dry-run plan for ENVIRONMENT
 	./platform/scripts/deploy.sh --environment $(ENVIRONMENT) --dry-run
+
+##@ Monitoring
+
+monitoring-up: ## Start full Grafana + ELK monitoring stack locally
+	@echo "$(CYAN)▶ Starting monitoring stack...$(RESET)"
+	docker compose -f build/docker/docker-compose.monitoring.yml up -d --wait
+	@echo ""
+	@echo "  Grafana:       http://localhost:3000  (admin/SuperApp@Grafana2024)"
+	@echo "  Kibana:        http://localhost:5601  (elastic/SuperApp@Elastic2024)"
+	@echo "  Prometheus:    http://localhost:9090"
+	@echo "  Elasticsearch: http://localhost:9200"
+
+monitoring-down: ## Stop monitoring stack
+	docker compose -f build/docker/docker-compose.monitoring.yml down
+
+monitoring-status: ## Check status of monitoring services
+	docker compose -f build/docker/docker-compose.monitoring.yml ps
+
+elk-setup: ## Initialise Elasticsearch templates and ILM policies
+	@echo "$(CYAN)▶ Setting up Elasticsearch...$(RESET)"
+	@sleep 10  # Wait for ES to be ready
+	curl -s -u elastic:$${ELASTIC_PASSWORD:-SuperApp@Elastic2024} \
+	  -X PUT http://localhost:9200/_index_template/superapp-kpi \
+	  -H "Content-Type: application/json" \
+	  -d @platform/monitoring/elk/elasticsearch/templates/superapp-kpi-template.json
+	curl -s -u elastic:$${ELASTIC_PASSWORD:-SuperApp@Elastic2024} \
+	  -X PUT http://localhost:9200/_ilm/policy/superapp-kpi-ilm \
+	  -H "Content-Type: application/json" \
+	  -d @platform/monitoring/elk/elasticsearch/ilm/superapp-kpi-ilm.json
+	@echo "✅ Elasticsearch configured"
+
+grafana-dashboards: ## Import Grafana dashboards
+	@echo "$(CYAN)▶ Dashboards are auto-provisioned via volume mount$(RESET)"
+	@echo "  Open: http://localhost:3000/dashboards"
+	@echo "  KPI Dashboard: SuperApp Mobile — Republic Bank Ghana KPI Dashboard"

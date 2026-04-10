@@ -92,3 +92,5 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SuperApp.Identity.Tests", "
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SuperApp.E2E.Tests", "tests\e2e\SuperApp.E2E.Tests.csproj", "{D1000005-0000-0000-0000-000000000005}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SuperApp.Observability", "src\shared\SuperApp.Observability\SuperApp.Observability.csproj", "{B1000006-0000-0000-0000-000000000006}"
+EndProject
