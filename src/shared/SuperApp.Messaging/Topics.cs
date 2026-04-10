@@ -15,3 +15,7 @@ public static class Topics
     public const string WalletEvents       = "superapp-wallet-events";
     public const string DeadLetterQueue    = "superapp-dlq";
 }
+
+// Data erasure topics (GDPR / BoG data rights)
+public const string UserDeletionRequests = "superapp-user-deletion-requests";
+public const string UserErasureCompleted = "superapp-user-erasure-completed";

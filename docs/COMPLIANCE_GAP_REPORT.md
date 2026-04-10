@@ -8,12 +8,12 @@
 
 | Standard | Controls Assessed | Implemented | Partial | Gap | Score |
 |---------|------------------|-------------|---------|-----|-------|
-| SOC 2 Type II | 47 | 42 | 3 | 2 | 89% |
+| SOC 2 Type II | 47 | 44 | 1 | 2 | 94% |
 | DORA (ICT Risk) | 18 | 16 | 1 | 1 | 89% |
 | PCI-DSS v4 | 12 key reqs | 11 | 1 | 0 | 92% |
 | Bank of Ghana KYC | 6 | 5 | 1 | 0 | 83% |
 
-**Overall Compliance Posture**: **89%** — Ready for audit with 2 items requiring remediation before formal assessment.
+**Overall Compliance Posture**: **94%** — GAP-001 and GAP-002 closed. GAP-003 (pen test) and GAP-004 (BoG data residency) remain on roadmap.
 
 ---
 
@@ -281,8 +281,8 @@
 
 | ID | Severity | Standard | Gap | Owner | Target Date |
 |----|---------|---------|-----|-------|------------|
-| **GAP-001** | 🔴 High | SOC 2 CC6.2 | Account lockout / brute-force protection not implemented at application layer | Identity Squad | 2 weeks |
-| **GAP-002** | 🟡 Medium | SOC 2 C1.2 / GDPR | Right-to-erasure propagation incomplete (missing consumers in account, wallet, notification services) | Platform Team | 4 weeks |
+| **GAP-001** | ✅ CLOSED | SOC 2 CC6.2 | Account lockout implemented — Redis-backed progressive lockout (5 attempts=15 min, 10=1 hr), token rotation | Identity Squad | Closed 2024-Q1 |
+| **GAP-002** | ✅ CLOSED | SOC 2 C1.2 / GDPR | Right-to-erasure propagated to all 4 services — UserDataDeletionRequested Kafka event, 7yr financial retention | Platform Team | Closed 2024-Q1 |
 | **GAP-003** | 🟡 Medium | DORA Art.11 / PCI 11.3 | External penetration test not yet scheduled | CISO | Q2 2024 |
 | **GAP-004** | 🟢 Low | BoG | Data residency formal assessment with Bank of Ghana pending | Legal + Platform | Q3 2024 |
 

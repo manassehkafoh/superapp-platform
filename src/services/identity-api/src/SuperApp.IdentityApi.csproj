@@ -13,5 +13,8 @@
     <PackageReference Include="MassTransit.Kafka"                             Version="8.2.3" />
     <PackageReference Include="Azure.Identity" Version="1.11.4" />
     <PackageReference Include="Swashbuckle.AspNetCore"                       Version="6.5.0" />
+    <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="8.0.0" />
+    <PackageReference Include="MassTransit.Kafka" Version="8.2.3" />
+    <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
   </ItemGroup>
 </Project>
